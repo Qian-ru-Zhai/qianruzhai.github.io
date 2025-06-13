@@ -1,0 +1,38 @@
+
+### 🔍 Background
+
+While using  **Java 10 x64** application, the application **crashed immediately** . Interestingly, when running the same scenario with **Java 9**, everything worked as expected.
+
+At first, this led us to believe that the issue was introduced in the **JVM upgrade from Java 9 to Java 10**.
+
+---
+
+### 💣 Symptom
+
+- Works with Java 9
+- Crashes with Java 10 
+- No meaningful Java-level exception; the crash occurs at native level
+
+---
+
+### 🔬 Investigation
+
+After tracing the crash further into native layers and debugger output, we discovered that the problem was **not directly caused by JVM version changes**.
+
+The actual root cause was:
+
+> 💥 **The `SizeOfStruct` field of the `IMAGEHLP_MODULE` structure was not set before calling `SymGetModuleInfo()`**.
+
+This structure is used in symbol handling APIs on Windows (part of the DbgHelp library). Failing to initialize it properly can lead to **access violations or corrupted memory**, especially in newer 64-bit environments like Java 10.
+
+---
+
+### ✅ Solution
+
+To fix the crash:
+- Ensure that `IMAGEHLP_MODULE.SizeOfStruct` is set to `sizeof(IMAGEHLP_MODULE)` before calling any Windows debug symbol APIs like `SymGetModuleInfo`.
+
+```cpp
+IMAGEHLP_MODULE moduleInfo = { 0 };
+moduleInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE);
+SymGetModuleInfo(process, baseAddr, &moduleInfo);
